@@ -81,7 +81,10 @@ class SegCompoundAug(object):
             point_key_i = "tta_%s_points" %i
 
             points = self.compound_trans(
-                res["lidar"]["all_points"].copy()
+                # TODO: KHANH COMMENT AND ADD BELOW
+                # res["lidar"]["all_points"].copy()
+                res["lidar"]["points"].copy()
+                # KHANH
             )
             res["lidar"][point_key_i] = points
 

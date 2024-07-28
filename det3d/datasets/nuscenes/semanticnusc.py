@@ -221,13 +221,18 @@ class SemanticNuscDataset(Dataset):
             unique_label_str = [SemNuScene_label_name[x] for x in unique_label + 1]
 
             hist_list = []
-            for token, pred_dict in detections.items():
+            for i, (token, pred_dict) in enumerate(detections.items()):
                 anno_dict = self.get_anno_for_eval(token)
                 assert "point_sem_labels" in anno_dict
                 
                 pred_point_sem_labels = pred_dict["pred_point_sem_labels"].numpy()
                 gt_point_sem_labels = anno_dict["point_sem_labels"]
-                
+
+                if 'valid_mask' in pred_dict:
+                    gt_point_sem_labels = gt_point_sem_labels[pred_dict['valid_mask'].numpy()]
+                    if i == 0:
+                        print('Has valid mask')
+                    
                 assert pred_point_sem_labels.shape[0] == gt_point_sem_labels.shape[0], "pred_point_sem_labels.shape: {}, gt_point_sem_labels.shape: {}".format(pred_point_sem_labels.shape, gt_point_sem_labels.shape)
 
 

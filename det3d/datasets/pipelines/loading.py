@@ -432,6 +432,7 @@ class LoadPointCloudFromFile(object):
             raise NotImplementedError
 
         self.A.set_points(points[:, 0:3], points[:, 3]) # points, intensity
+        print('points shape:', points.shape, end=' ')
         res['range data'] = self.get_range_image()
 
 
@@ -490,7 +491,12 @@ class LoadPointCloudFromFile(object):
             'scan_rv': F.to_tensor(scan) if torch.is_tensor(scan) == False else scan,
             'range_pxpy': np.hstack([self.A.proj_x.reshape(-1, 1), self.A.proj_y.reshape(-1, 1)])
         }
-        
+
+        # print('mask count:', mask.sum(), 'scan shape:', scan.shape)
+        # print('px, py shape:', data_dict['range_pxpy'].shape)
+        # print('example row of scan:', scan[0][0][-1])
+        # print('out x:', sum(self.A.proj_x < 0) + sum(self.A.proj_x >= 1920))
+        # print('out y:', sum(self.A.proj_y < 0) + sum(self.A.proj_y >= 32))
         return data_dict
 
 

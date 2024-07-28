@@ -277,6 +277,8 @@ class PointSegMSeg3DHead(nn.Module):
                 voxel_logits: (Nc1 + Nc2 + Nc3 + ..., n_cls)
                 out_logits: (Np1 + Np2 + Np3 + ..., n_cls)
         """
+        self.miou1 = kwargs.get('miou1')
+
         batch_size = batch_dict["batch_size"]
 
 
@@ -423,6 +425,9 @@ class PointSegMSeg3DHead(nn.Module):
         batch_dict["out_logits"] = out_logits
         self.forward_ret_dict["out_logits"] = out_logits
 
+        if self.miou1 == True:
+            self.valid_mask = valid_mask
+
         return batch_dict
 
 
@@ -508,7 +513,7 @@ class PointSegMSeg3DHead(nn.Module):
             else:
                 meta_list = example["metadata"]
 
-                stack_pred_logits = self.forward_ret_dict["out_logits"]                
+                stack_pred_logits = self.forward_ret_dict["out_logits"]            
                 stack_pred_sem_labels = torch.argmax(stack_pred_logits, dim=1)
                 
                 for i in range(batch_size):
@@ -517,13 +522,29 @@ class PointSegMSeg3DHead(nn.Module):
                     ret["metadata"] = meta_list[i]
 
                     cur_bs_mask = (stack_points[:, 0] == i)
-                    ret["pred_point_sem_labels"] = stack_pred_sem_labels[cur_bs_mask]
 
+                    if self.miou1 == True:
+                        # print('self miou1:', self.miou1)
+                        valid_mask = torch.where(cur_bs_mask & self.valid_mask==True, True, False)
+                        stack_pred_logits = self.forward_ret_dict["out_logits"][valid_mask]                
+                        stack_pred_sem_labels = torch.argmax(stack_pred_logits, dim=1)
+                        ret["pred_point_sem_labels"] = stack_pred_sem_labels
+                        ret["valid_mask"] = self.valid_mask[cur_bs_mask]
+                    else:
+                        ret["pred_point_sem_labels"] = stack_pred_sem_labels[cur_bs_mask]
+                        
+                    
                     if "point_sem_labels" in example:
                         # not used
                         ret["point_sem_labels"] = example["point_sem_labels"][cur_bs_mask]
                         # ret["voxel_sem_labels"] = example["voxel_sem_labels"][cur_bs_mask]
 
+                    # index: 0 ret["pred_point_sem_labels"] shape: torch.Size([125761])
+                    # index: 1 ret["pred_point_sem_labels"] shape: torch.Size([116983])
+                    # print('index:', i, 'ret["pred_point_sem_labels"] shape:', ret["pred_point_sem_labels"].shape)
+                    # index: 0 ret["pred_point_sem_labels"] shape: torch.Size([126857])
+                    # index: 1 ret["pred_point_sem_labels"] shape: torch.Size([126165])
+                    
                     ret_list.append(ret)
 
         return ret_list

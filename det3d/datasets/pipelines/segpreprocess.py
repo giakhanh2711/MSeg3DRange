@@ -13,9 +13,9 @@ from ..registry import PIPELINES
 import cv2
 from torchvision.transforms import ColorJitter
 from .img_transforms import RandomCrop, RandomRescale, image_and_points_cp_and_label_resize, image_and_points_cp_and_label_random_horizon_flip, image_input_transform, jpeg_compression
-from OpenPCSeg.pcseg.data.dataset.semantickitti.laserscan import SemLaserScan
-from torchvision.transforms import functional as F
-from .loading import view_points
+
+
+
 
 @PIPELINES.register_module
 class SegPreprocess(object):
@@ -62,7 +62,7 @@ class SegPreprocess(object):
 
             points = segprep.points_global_translate_(points, noise_translate_std=self.global_translate_std)
 
-            
+
         elif self.no_augmentation:
             pass
 
@@ -111,16 +111,17 @@ class SegPreprocess(object):
                 gt_dict["point_sem_labels"] = gt_dict["point_sem_labels"][:self.npoints]
                 gt_dict["point_inst_labels"] = gt_dict["point_inst_labels"][:self.npoints]
 
+
         res["lidar"]["points"] = points 
         res["lidar"]["all_points"] = all_points 
         res["lidar"]["points_shuffle_idx"] = points_shuffle_idx 
 
-        #print('point shape before:', points.shape)
         if self.mode in ["train"]:
             res["lidar"]["annotations"] = gt_dict
             res["lidar"]["points_with_labels"] = points_with_labels
 
         return res, info
+
 
 
 @PIPELINES.register_module
@@ -400,8 +401,6 @@ class SegAssignLabel(object):
 @PIPELINES.register_module
 class SegImagePreprocess(object):
     def __init__(self, cfg=None, **kwargs):
-        self.tta_flag = cfg.get('tta_flag', False)
-        self.num_tta_tranforms = cfg.get('num_tta_tranforms', False)
         # set img aug parameters
         self.shuffle_points = cfg.get('shuffle_points', False)
         self.random_horizon_flip = cfg.get('random_horizon_flip', False)
@@ -508,157 +507,7 @@ class SegImagePreprocess(object):
 
         return image, points_cp, image_label
 
-    def augment_images(self, cam_names, resized_images, points_cp):
-        for cam_id, img in zip(cam_names, resized_images):
-            point_cam_id_mask = points_cp[:, 0] == int(cam_id)
-            idx = int(cam_id)-1 
-    
-            if self.random_horizon_flip:
-                img, points_cp[point_cam_id_mask, 1], _ = image_and_points_cp_and_label_random_horizon_flip(
-                    image=img, 
-                    points_cp=points_cp[point_cam_id_mask, 1],
-                    image_label=None
-                )
 
-            if self.random_color_jitter:
-                img = self.random_color_jitter_wrap(img)
-
-
-            if self.random_jpeg_compression:
-                img = jpeg_compression(
-                    image=img, 
-                    quality_noise=self.random_jpeg_compression_cfg["quality_noise"], 
-                    probability=self.random_jpeg_compression_cfg["probability"],
-                )
-
-            if self.random_rescale:
-                img, points_cp[point_cam_id_mask], img_sem_label = self.random_rescale_wrap(
-                    image=img, 
-                    points_cp=points_cp[point_cam_id_mask], 
-                    image_label=None
-                )
-
-            if self.random_crop:
-                img, points_cp[point_cam_id_mask], img_sem_label = self.random_crop_wrap(
-                    image=img, 
-                    points_cp=points_cp[point_cam_id_mask], 
-                    image_label=None
-                )
-
-
-            resized_images[idx] = img
-
-        return resized_images
-
-        
-    def cp_cuv_tta(self, points, info, res):
-        cam_chan = res["cam"]["chan"]
-
-        im_shape = (900, 1600, 3)
-
-        # final shape: (npoints, 3)
-        # [cam_id, idx_of_width, idx_of_height]
-        # without normalization here
-        pts_uv_all = np.ones([points.shape[0], 3]).astype(np.float32) * -100
-
-        for cam_id, cam_sensor in enumerate(cam_chan):
-            cam_from_global = info["cams_from_global"][cam_sensor]
-            cam_intrinsic = info["cam_intrinsics"][cam_sensor]
-
-            # lidar to global
-            ref_to_global = info["ref_to_global"]
-            pts_hom = np.concatenate([points[:, :3], np.ones([points.shape[0], 1])], axis=1)
-            pts_global = ref_to_global.dot(pts_hom.T)  # 4 * N
-
-            # global to cam
-            pts_cam = cam_from_global.dot(pts_global)[:3, :]  # 3 * N
-
-            # cam to uv
-            pts_uv = view_points(pts_cam, np.array(cam_intrinsic), normalize=True).T  # N * 3
-
-            # Remove points that are either outside or behind the camera. Leave a margin of 1 pixel for aesthetic reasons.
-            mask = (pts_cam[2, :] > 0) & (pts_uv[:, 0] > 1) & (pts_uv[:, 0] < im_shape[1] - 1) & (
-                    pts_uv[:, 1] > 1) & (pts_uv[:, 1] < im_shape[0] - 1)
-
-            # mask = (pts_cam[2, :] > 0) \
-            #     & (pts_uv[:, 0] > 0) & (pts_uv[:, 0] < im_shape[1] - 1) \
-            #     & (pts_uv[:, 1] > 0) & (pts_uv[:, 1] < im_shape[0] - 1)
-
-            pts_uv_all[mask, :2] = pts_uv[mask, :2]
-            # NOTE: cam_id starts from 1, following the waymo style
-            pts_uv_all[mask, 2] = float(cam_id) + 1
-
-        # reformat as semantciwaymo: [cam_id, idx_of_width, idx_of_height]
-        # NOTE: BE CAREFUL
-        points_cp = pts_uv_all[:, [2, 0, 1]]
-
-        ori_images = res["images"] 
-        assert points_cp.shape[0] == points.shape[0]
-        cam_names = res["cam"]["names"] 
-        cam_attributes = res["cam"]["attributes"]  
-        resized_shape_cv = res["cam"]["resized_shape"]
-
-        # 3: [camid, u, v]
-        points_cuv_all = np.ones([points.shape[0], 3]).astype(np.float32) * -100
-    
-        # training: resize the multicamera images as the same shape, then do augmentations
-        # inference: resize the multicamera images as the same shape
-        resized_images = []
-        resized_image_sem_labels = []
-        for cam_id, ori_image in zip(cam_names, ori_images):
-            point_cam_id_mask = points_cp[:, 0] == int(cam_id)
-            idx = int(cam_id)-1 
-            
-            resized_image, points_cp[point_cam_id_mask], _ = image_and_points_cp_and_label_resize(
-                image=ori_image, 
-                points_cp=points_cp[point_cam_id_mask], 
-                image_label=None, 
-                resized_shape=resized_shape_cv,
-            )
-            resized_images.append(resized_image)
-
-        resized_images = self.augment_images(cam_names, resized_images.copy(), points_cp.copy())
-        
-        for cam_id, img in zip(cam_names, resized_images):
-            idx = int(cam_id)-1 
-            img = image_input_transform(
-                img, 
-                mean=cam_attributes[cam_id]["mean"], 
-                std=cam_attributes[cam_id]["std"],
-            ).astype(np.float32)
-            resized_images[idx] = img
-
-
-
-        # num_cam [H, W, 3] -> [num_cam, H, W, 3] -> [num_cam, 3, H, W]
-        images = np.stack(resized_images, axis=0).transpose((0,3,1,2))
-        res_shape = images.shape[-2:] # [H, W]
-
-        # normalize the camera projection coordinates to [-1, 1], in order to use F.grid_sample later
-        # F.grid_sample supports 3D tensor interpolation, so the cam_id can also be normalized to [-1, 1]
-        # input: (N, C, D_\text{in}, H_\text{in}, W_\text{in})
-        # output: (N, C, D_\text{out}, H_\text{out}, W_\text{out})
-        # input: grid (N, D_out, H_out​, W_out​, 3) 3: [d, h, w]
-        if len(cam_names) > 1:
-            points_cuv_all[:, 0] = (points_cp[:, 0] - 1) / (len(cam_names) - 1) * 2 - 1
-        else:
-            # 0 is fine for nusc
-            points_cuv_all[:, 0] = 0
-            # points_cuv_all[:, 0] = -1
-
-
-        points_cuv_all[:, 1] = points_cp[:, 2] / (res_shape[0] - 1) * 2 -1
-        points_cuv_all[:, 2] = points_cp[:, 1] / (res_shape[1] - 1) * 2 -1
-
-
-        # points_cp_valid: (points.shape[0], 1)
-        points_cp_valid = (points_cp[:, 0:1] > 0).astype(points_cuv_all.dtype)  
-        # points_cuv_all: (points.shape[0], 4), the inner 4 dims: [valid, normed_camid, normed_h_coord, normed_w_coord] 
-        
-        points_cuv = np.concatenate([points_cp_valid, points_cuv_all], axis=1) # normalized camera projection coordinates
-
-        return points_cuv, images
-        
     def __call__(self, res, info):
         # res["mode"] = self.mode
         mode = res["mode"]
@@ -673,26 +522,6 @@ class SegImagePreprocess(object):
             raise NotImplementedError
 
         elif dataset_type in ["SemanticWaymoDataset", "SemanticNuscDataset", "SemanticKITTIDataset"]:
-
-            # -------begin: TTA for seg3d from SDSeg3d--------------
-            # tta_flag = self.tta_flag and (res["mode"] != 'train')
-            tta_flag = self.tta_flag
-            if tta_flag:
-                for i in range(1, self.num_tta_tranforms):
-                    point_key_i = "tta_%s_points" %i
-                    tta_cuv, images = self.cp_cuv_tta(
-                        deepcopy(res["lidar"][point_key_i]),
-                        deepcopy(info),
-                        deepcopy(res),
-                    )
-    
-                    images_key_i = "tta_%s_images" %i
-                    res["lidar"][images_key_i] = dict(
-                        points_cuv = tta_cuv,
-                        images = images,
-                    )
-            # -------end: TTA for seg3d from SDSeg3d--------------
-
 
             points_cp = res["lidar"]["points_cp"] # (npoints, 3), [cam_id, idx_of_width, idx_of_height]
             points = res["lidar"]["points"]
@@ -844,6 +673,4 @@ class SegImagePreprocess(object):
 
             res["images"] = images
 
-        
         return res, info
-

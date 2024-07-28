@@ -56,9 +56,8 @@ class Reformat(object):
 
         if res["mode"] == "train":
             data_bundle.update(res["lidar"]["targets"])
-        elif res["mode"] == "val":
+        if res["mode"] in ["val"]:
             data_bundle.update(dict(metadata=meta, ))
-
 
             # NOTE: double_flip is for det3d from CenterPoint instead of seg3d
             if self.double_flip: 

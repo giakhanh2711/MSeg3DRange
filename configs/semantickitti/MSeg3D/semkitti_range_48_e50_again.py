@@ -7,73 +7,66 @@ from hrnet_cfg import hrnet_w48
 #from hrnet_cfg import hrnet_w18
 from fcn_cfg import fcn_head
 
-num_class=17
+
+num_class=20
 ignore_class=0
 
-
 use_img = True
-# NOTE: keep the order
-cam_chan = ['CAM_FRONT', 'CAM_FRONT_RIGHT', 'CAM_BACK_RIGHT', 'CAM_BACK', 'CAM_BACK_LEFT', 'CAM_FRONT_LEFT']
-cam_names = ['1', '2', '3', '4', '5', '6'] 
-nusc_mean = [0.40789654, 0.44719302, 0.47026115] # BGR
-nusc_std = [0.28863828, 0.27408164, 0.27809835] # BGR
+cam_names = ['1'] 
+semkitti_mean = [0.406, 0.456, 0.485] # BGR
+semkitti_std  = [0.225, 0.224, 0.229] # BGR
 cam_attributes = {
-    '1': dict(mean=nusc_mean, std=nusc_std),
-    '2': dict(mean=nusc_mean, std=nusc_std),
-    '3': dict(mean=nusc_mean, std=nusc_std),
-    '4': dict(mean=nusc_mean, std=nusc_std),
-    '5': dict(mean=nusc_mean, std=nusc_std),
-    '6': dict(mean=nusc_mean, std=nusc_std),
+    '1': dict(mean=semkitti_mean, std=semkitti_std),
 }
+im_height, img_width = 360, 1280
 
 
 
 hrnet_w48_cfg = dict(
     pretrained='./work_dirs/pretrained_models/hrnetv2_w48-d2186c55.pth',
-    frozen_stages=3, # memory saving by the frozen 3/4 stages
+    frozen_stages=3, 
     norm_eval=False, 
 )
 hrnet_w48.update(hrnet_w48_cfg)
 
 
-
 fcn_head_cfg = dict(
     type="FCNMSeg3DHead",
-    
     num_classes=num_class,
     ignore_index=ignore_class,
     in_index=(0, 1, 2, 3), 
-    in_channels=[48, 96, 192, 384], # hrnet-w48
-    #in_channels=[18, 36, 72, 144],  # hrnet-w18 
+    in_channels=[48, 96, 192, 384], # hrnetw48 
+    #in_channels=[18, 36, 72, 144],    # hrnetw18 
     num_convs=2,
-    channels=48, # compressed channels
+    channels=48, 
     loss_weight=0.5, 
 )
 fcn_head.update(fcn_head_cfg)
 
 
-point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
-voxel_size=[0.1, 0.1, 0.2]
+
+
+# training and testing settings
+point_cloud_range=[-75.2, -75.2, -4, 75.2, 75.2, 2]
+voxel_size=[0.1, 0.1, 0.15]
+
+
 
 
 # model settings
 model = dict(
-    # type="SegNet",
     type="SegMSeg3DNet",
-
     pretrained=None,
-
 
     # img branch
     img_backbone = hrnet_w48 if use_img else None,
-    img_head = fcn_head if use_img else None,    
-    
+    img_head = fcn_head if use_img else None,   
 
     # KHANH ADD
     range_backbone = dict(
         NAME= 'CENet',
-        IGNORE_LABEL= ignore_class,
-        NUM_CLASS= num_class,
+        IGNORE_LABEL= 0,
+        NUM_CLASS= 20,
         IF_BN= True,
         IF_INTENSITY= True,
         IF_RANGE= True,
@@ -86,16 +79,14 @@ model = dict(
     ), 
     # KHANH ADD
     
-    
     # point cloud branch
     reader=dict(
         type="ImprovedMeanVoxelFeatureExtractor",
-        num_input_features=5, 
+        num_input_features=4, 
     ),
     backbone=dict(
-        # type="UNetV6", 
         type="UNetSCN3D", 
-        num_input_features=5+8, 
+        num_input_features=4+8, 
         ds_factor=8, 
         us_factor=8,
         point_cloud_range=point_cloud_range, 
@@ -116,7 +107,7 @@ model = dict(
             VOXEL_ALIGN_DIM=64,
             IMAGE_IN_DIM=48,  
             IMAGE_ALIGN_DIM=64,
-            
+
             # KHANH ADD
             RANGE_ALIGN_DIM=64,
             RANGE_IN_DIM=128,
@@ -133,7 +124,7 @@ model = dict(
                 embeddings_proj_kernel_size=1, 
                 d_model=96,
                 n_head=4,
-                n_layer=6, # decreasing this can save memory
+                n_layer=6,
                 n_ffn=192,
                 drop_ratio=0,
                 activation="relu",
@@ -147,34 +138,35 @@ train_cfg = dict()
 test_cfg = dict()
 
 
+
 # dataset settings
-dataset_type = "SemanticNuscDataset"
-data_root =  "data/SemanticNusc"
+dataset_type = "SemanticKITTIDataset"
+data_root = "../data/SemanticKITTI/dataset/sequences" 
 nsweeps = 1
 
 
 train_preprocessor = dict(
     mode="train",
     shuffle_points=True,
-    npoints=100000,
+    npoints=500000,
     global_rot_noise=[-0.78539816, 0.78539816],
     global_scale_noise=[0.95, 1.05], 
     global_translate_std=0.5,
 )
+
 val_preprocessor = dict(
     mode="val",
     shuffle_points=False,
 )
+
 test_preprocessor = dict(
     mode="val",
     shuffle_points=False,
 )
 
-
-
 train_image_preprocessor = dict(
     shuffle_points=train_preprocessor["shuffle_points"],
-    random_horizon_flip=True,
+    random_horizon_flip=True, 
 
     random_color_jitter_cfg=dict(
         brightness=0.3, 
@@ -193,7 +185,7 @@ train_image_preprocessor = dict(
     ),
     
     random_crop_cfg=dict( 
-        crop_size=(640, 960), # NOTE: (H, W)
+        crop_size=(im_height, img_width), 
         cat_max_ratio=0.75,
         kept_min_ratio=0.60, 
         ignore_index=ignore_class, 
@@ -216,42 +208,44 @@ voxel_generator = dict(
     range=point_cloud_range,
     voxel_size=voxel_size,
     max_points_in_voxel=5,
-    max_voxel_num=[300000, 300000],
+    max_voxel_num=[500000, 500000], 
 )
-
 
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type, use_img=use_img),
     dict(type="LoadImageFromFile", use_img=use_img),
+
     dict(type="LoadPointCloudAnnotations", with_bbox=False),
     dict(type="LoadImageAnnotations", points_cp_radius=2),
+
     dict(type="SegPreprocess", cfg=train_preprocessor, use_img=use_img),
     dict(type="SegImagePreprocess", cfg=train_image_preprocessor),
+
     dict(type="SegVoxelization", cfg=voxel_generator),
     dict(type="SegAssignLabel", cfg=dict(voxel_label_enc="compact_value")),
     dict(type="Reformat"),
 ]
+
 val_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type, use_img=use_img),
     dict(type="LoadImageFromFile", use_img=use_img),
     dict(type="SegPreprocess", cfg=val_preprocessor, use_img=use_img),
     dict(type="SegImagePreprocess", cfg=val_image_preprocessor),
     dict(type="SegVoxelization", cfg=voxel_generator),
+    dict(type="SegAssignLabel", cfg=dict(voxel_label_enc="compact_value")),
     dict(type="Reformat"),
 ]
-test_pipeline = [
-    dict(type="LoadPointCloudFromFile", dataset=dataset_type, use_img=use_img),
-    dict(type="LoadImageFromFile", use_img=use_img),
-    dict(type="SegPreprocess", cfg=test_preprocessor, use_img=use_img),
-    dict(type="SegImagePreprocess", cfg=test_image_preprocessor),
-    dict(type="SegVoxelization", cfg=voxel_generator),
-    dict(type="Reformat"),]
+test_pipeline = []
 
+train_anno = None
+val_anno = None
+test_anno = None
 
-train_anno = "data/SemanticNusc/infos_train_10sweeps_segdet_withvelo_filter_True.pkl"
-val_anno = "data/SemanticNusc/infos_val_10sweeps_segdet_withvelo_filter_True.pkl"
-test_anno = "data/SemanticNusc/infos_test_10sweeps_segdet_withvelo.pkl"
-
+train_seq = ['00', '01', '02', '03', '04', '05', '06', '07', '09', '10']
+val_seq = ['08']
+# train_seq = ['04']
+# val_seq = ['04']
+test_seq = ['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
 
 data = dict(
     samples_per_gpu=8, 
@@ -262,9 +256,9 @@ data = dict(
         info_path=train_anno,
         ann_file=train_anno,
         cam_names=cam_names,
-        cam_chan=cam_chan,
         cam_attributes=cam_attributes,
-        img_resized_shape=(960, 640), # (width, height) in opencv format
+        img_resized_shape=(img_width, im_height),
+        sequences=train_seq,
         nsweeps=nsweeps,
         load_interval=1, 
         pipeline=train_pipeline,
@@ -275,10 +269,11 @@ data = dict(
         info_path=val_anno,
         test_mode=True,
         ann_file=val_anno,
+        # IMG
         cam_names=cam_names,
-        cam_chan=cam_chan,
         cam_attributes=cam_attributes,
-        img_resized_shape=(960, 640), 
+        img_resized_shape=(img_width, im_height), 
+        sequences=val_seq,
         nsweeps=nsweeps,
         load_interval=1,
         pipeline=val_pipeline,
@@ -290,19 +285,18 @@ data = dict(
         test_mode=True,
         ann_file=test_anno,
         cam_names=cam_names,
-        cam_chan=cam_chan,
         cam_attributes=cam_attributes,
-        img_resized_shape=(960, 640), 
+        img_resized_shape=(img_width, im_height), 
+        sequences=test_seq,
         nsweeps=nsweeps,
         pipeline=test_pipeline,
-        version='v1.0-test'
     ),
 )
 
 
 
-# optimizer
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
+# optimizer
 optimizer = dict(
     type="adam", amsgrad=0.0, wd=0.01, fixed_wd=True, moving_average=False,
 )
@@ -313,16 +307,16 @@ lr_config = dict(
 checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
-    interval=5,
+    interval=5, 
     hooks=[
         dict(type="TextLoggerHook"),
         # dict(type='TensorboardLoggerHook')
     ],
 )
 
-# yapf:enable
-# runtime settings
-total_epochs = 36
+
+total_epochs = 50
+# total_epochs = 24
 
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
@@ -333,3 +327,5 @@ resume_from = None
 workflow = [('train', 1), ('val', 1)]
 
 sync_bn_type = "torch"
+
+

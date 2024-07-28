@@ -129,7 +129,7 @@ class SemanticKITTIDataset(Dataset):
             self.pipeline = None
         else:
             self.pipeline = Compose(pipeline)
-
+        
     def reset(self):
         assert False
 
@@ -205,6 +205,7 @@ class SemanticKITTIDataset(Dataset):
             "mode": "val" if self.test_mode else "train",
             "painted": False, 
         }
+            
         data, _ = self.pipeline(res, info)
 
         return data
@@ -252,15 +253,38 @@ class SemanticKITTIDataset(Dataset):
             unique_label_str = [SemKITTI_label_name[x] for x in unique_label + 1]
 
             hist_list = []
-            for token, pred_dict in detections.items():
+            for i, (token, pred_dict) in enumerate(detections.items()): # 0 -> #iter
                 anno_dict = self.get_anno_for_eval(token)
                 assert "point_sem_labels" in anno_dict
-                
-                pred_point_sem_labels = pred_dict["pred_point_sem_labels"].numpy()
-                gt_point_sem_labels = anno_dict["point_sem_labels"]
-                
-                assert pred_point_sem_labels.shape[0] == gt_point_sem_labels.shape[0], "pred_point_sem_labels.shape: {}, gt_point_sem_labels.shape: {}".format(pred_point_sem_labels.shape, gt_point_sem_labels.shape)
 
+                pred_point_sem_labels = pred_dict["pred_point_sem_labels"].numpy()
+
+                # SAVE PREDICTION
+                pred_point_sem_labels_save = np.expand_dims(pred_point_sem_labels,axis=1)
+ 
+                # 'out/SemKITTI_test/sequences/11/predictions/000001.label'
+                output_path = osp.join(output_dir, 'out/SemKITTI_test')
+                save_dir = output_path + '/sequences/' + token.replace('velodyne','predictions')[:-3]+'label'
+                if not os.path.exists(os.path.dirname(save_dir)):
+                    try:
+                        os.makedirs(os.path.dirname(save_dir))
+                    except OSError as exc:
+                        if exc.errno != errno.EEXIST:
+                            raise
+                pred_point_sem_labels_save = pred_point_sem_labels_save.astype(np.uint32)
+                pred_point_sem_labels_save.tofile(save_dir)
+                # END SAVE
+                
+                gt_point_sem_labels = anno_dict["point_sem_labels"]
+                if 'valid_mask' in pred_dict:
+                    gt_point_sem_labels = gt_point_sem_labels[pred_dict['valid_mask'].numpy()]
+                # else:
+                #     gt_point_sem_labels = pred_dict["point_sem_labels"].numpy()
+                # print('i:', i, 'pred_point_sem_labels:', pred_point_sem_labels.shape, 'gt_point_sem_labels shape:', gt_point_sem_labels.shape)
+                # i: 0 pred_point_sem_labels: (126857,) gt_point_sem_labels shape: (126857,)
+                # i: 1 pred_point_sem_labels: (126165,) gt_point_sem_labels shape: (126165,) i to #iter
+                
+                assert pred_point_sem_labels.shape[0] == gt_point_sem_labels.shape[0], "pred_point_sem_labels.shape: {}, gt_point_sem_labels.shape {}".format(pred_point_sem_labels.shape, gt_point_sem_labels.shape)
 
                 hist_list.append(fast_hist_crop_func(
                     output=pred_point_sem_labels, 

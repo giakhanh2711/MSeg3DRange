@@ -89,6 +89,9 @@ def collate(batch, samples_per_gpu=1):
 
 
 def collate_kitti(batch_list, samples_per_gpu=1):
+    # print('batch_list:', len(batch_list), type(batch_list[0]))
+    # if type(batch_list[0]) is dict:
+    #     print('batch list[0]:', batch_list[0].keys())
     example_merged = collections.defaultdict(list)
     for example in batch_list:
         if type(example) is list:

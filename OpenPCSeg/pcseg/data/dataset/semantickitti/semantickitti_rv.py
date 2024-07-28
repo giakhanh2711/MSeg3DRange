@@ -140,6 +140,7 @@ class SemkittiRangeViewDataset(data.Dataset):
             dataset_dict = self.sample_transform(dataset_dict, split_point)
 
         scan, label, mask = self.prepare_input_label_semantic_with_mask(dataset_dict)
+        print('mask count:', mask.sum(), 'scan shape:', scan.shape)
 
         if self.if_range_mix > 0 or self.if_range_paste > 0 or self.if_range_union > 0:
 

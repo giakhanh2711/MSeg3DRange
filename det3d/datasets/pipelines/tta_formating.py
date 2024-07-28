@@ -137,7 +137,7 @@ class TTAReformat(object):
                         coordinates=tta_voxels["coordinates"],
 
                         points_cuv = tta_images['points_cuv'],
-                        images = res['images'],
+                        images = tta_images['images'],
                     )
 
                     if "range data" in res:

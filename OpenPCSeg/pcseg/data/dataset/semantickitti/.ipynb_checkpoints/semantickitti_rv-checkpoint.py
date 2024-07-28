@@ -7,7 +7,6 @@ import yaml
 import numpy as np
 import torch
 from torch.utils import data
-
 from torchvision.transforms import functional as F
 from .semantickitti_utils import LEARNING_MAP, color_map
 from .laserscan import SemLaserScan
@@ -23,11 +22,10 @@ class SemkittiRangeViewDataset(data.Dataset):
         logger = None,
     ):
         self.data_cfgs = data_cfgs
-        self.training = True if self.data_cfgs.DATA_SPLIT['split'] == 'train' else False
+        self.training = training
         self.root = root_path if root_path is not None else self.data_cfgs.DATA_PATH
         self.logger = logger
-        # self.split = self.data_cfgs.DATA_SPLIT['train'] if self.training else self.data_cfgs.DATA_SPLIT['test']
-        self.split = self.data_cfgs.DATA_SPLIT['split']
+        self.split = self.data_cfgs.DATA_SPLIT['train'] if self.training else self.data_cfgs.DATA_SPLIT['test']
         self.H, self.W = self.data_cfgs.H, self.data_cfgs.W  # (H, W)
         self.color_dict = color_map
         self.label_transfer_dict = LEARNING_MAP  # label mapping
@@ -79,58 +77,50 @@ class SemkittiRangeViewDataset(data.Dataset):
             if_range_paste=self.if_range_paste,
             if_range_union=self.if_range_union,
         )
-        # if self.split == 'train': folders = ['00', '01', '02', '03', '04', '05', '06', '07', '09', '10']
-        # elif self.split == 'val': folders = ['08']
-        # elif self.split == 'test': folders = ['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
+        if self.split == 'train': folders = ['00', '01', '02', '03', '04', '05', '06', '07', '09', '10']
+        elif self.split == 'val': folders = ['08']
+        elif self.split == 'test': folders = ['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
         
-        # self.lidar_list = []
-        # for folder in folders:
-        #     self.lidar_list += glob.glob(self.root + '/' + folder + '/velodyne/*.bin') 
-        # print("Loading '{}' samples from SemanticKITTI under '{}' split".format(len(self.lidar_list), self.split))
+        self.lidar_list = []
+        for folder in folders:
+            self.lidar_list += glob.glob(self.root + 'sequences/' + folder + '/velodyne/*.bin') 
+        print("Loading '{}' samples from SemanticKITTI under '{}' split".format(len(self.lidar_list), self.split))
 
-        # self.label_list = [i.replace("velodyne", "labels") for i in self.lidar_list]
-        # self.label_list = [i.replace("bin", "label") for i in self.label_list]
+        self.label_list = [i.replace("velodyne", "labels") for i in self.lidar_list]
+        self.label_list = [i.replace("bin", "label") for i in self.label_list]
 
-        # if self.split == 'train_test':
-        #     root_psuedo_labels = '/mnt/lustre/konglingdong/data/sets/sequences/'
-        #     folders_test = ['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
-        #     for i in self.label_list:
-        #         if i.split('sequences/')[1][:2] in folders_test:
-        #             i.replace(self.root + 'sequences/', root_psuedo_labels)
+        if self.split == 'train_test':
+            root_psuedo_labels = '/mnt/lustre/konglingdong/data/sets/sequences/'
+            folders_test = ['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
+            for i in self.label_list:
+                if i.split('sequences/')[1][:2] in folders_test:
+                    i.replace(self.root + 'sequences/', root_psuedo_labels)
 
-        # if self.if_range_mix:
-        #     strategy = 'mixtureV2'
-        #     # strategy = 'col4row1'
-        #     self.BeamMix = MixTeacherSemkitti(strategy=strategy)
-        #     print("Lasermix strategy: '{}'".format(strategy))
+        if self.if_range_mix:
+            strategy = 'mixtureV2'
+            # strategy = 'col4row1'
+            self.BeamMix = MixTeacherSemkitti(strategy=strategy)
+            print("Lasermix strategy: '{}'".format(strategy))
 
-        # print("Prob (RangeMix): {}.".format(self.if_range_mix))
-        # print("Prob (RangePaste): {}.".format(self.if_range_paste))
-        # print("Prob (RangeUnion): {}.".format(self.if_range_union))
+        print("Prob (RangeMix): {}.".format(self.if_range_mix))
+        print("Prob (RangePaste): {}.".format(self.if_range_paste))
+        print("Prob (RangeUnion): {}.".format(self.if_range_union))
 
-        # if self.if_scribble:
-        #     self.label_list = [i.replace("SemanticKITTI", "ScribbleKITTI") for i in self.label_list]
-        #     self.label_list = [i.replace("labels", "scribbles") for i in self.label_list]
-        #     print("Loading '{}' labels from ScribbleKITTI under '{}' split.\n".format(len(self.label_list), self.split))
+        if self.if_scribble:
+            self.label_list = [i.replace("SemanticKITTI", "ScribbleKITTI") for i in self.label_list]
+            self.label_list = [i.replace("labels", "scribbles") for i in self.label_list]
+            print("Loading '{}' labels from ScribbleKITTI under '{}' split.\n".format(len(self.label_list), self.split))
 
-        # else:
-        #     print("Loading '{}' labels from SemanticKITTI under '{}' split.\n".format(len(self.label_list), self.split))
+        else:
+            print("Loading '{}' labels from SemanticKITTI under '{}' split.\n".format(len(self.label_list), self.split))
 
 
     def __len__(self):
         return len(self.lidar_list)
 
     def __getitem__(self, index):
-
-        # KHANH ADD
-        if isinstance(index, str):
-            self.A.open_scan(index)
-            #self.A.open_label(index)
-        # KHANH ADD
-            
-        else:
-            self.A.open_scan(self.lidar_list[index])
-            #self.A.open_label(self.label_list[index])
+        self.A.open_scan(self.lidar_list[index])
+        self.A.open_label(self.label_list[index])
 
         # prepare attributes
         dataset_dict = {}
@@ -140,92 +130,66 @@ class SemkittiRangeViewDataset(data.Dataset):
         dataset_dict['range_img'] = self.A.proj_range
         dataset_dict['xyz_mask'] = self.A.proj_mask
         
-        
-        # TODO: KHANH add create random label for range image
-        # because we will not use them
-        semantic_label = torch.rand(self.H, self.W)
+        semantic_label = self.A.proj_sem_label
         semantic_train_label = self.generate_label(semantic_label)
         dataset_dict['semantic_label'] = semantic_train_label
-        # KHANH COMMENT
 
-        # # data aug (range shift)
-        # if np.random.random() >= (1 - self.if_range_shift):
-        #     split_point = random.randint(100, self.W-100)
-        #     dataset_dict = self.sample_transform(dataset_dict, split_point)
+        # data aug (range shift)
+        if np.random.random() >= (1 - self.if_range_shift):
+            split_point = random.randint(100, self.W-100)
+            dataset_dict = self.sample_transform(dataset_dict, split_point)
 
         scan, label, mask = self.prepare_input_label_semantic_with_mask(dataset_dict)
+        print('mask count:', mask.sum(), 'scan shape:', scan.shape)
 
-        # TODO: KHANH COMMENT all range image augmentation
-        # if self.if_range_mix > 0 or self.if_range_paste > 0 or self.if_range_union > 0:
-        #     idx = np.random.randint(0, len(self.lidar_list))
+        if self.if_range_mix > 0 or self.if_range_paste > 0 or self.if_range_union > 0:
 
-        #     self.A.open_scan(self.lidar_list[idx])
-        #     #self.A.open_label(self.label_list[idx])
-            
-        #     # KHANH ADD
-        #     #self.A.open_scan(index)
-        #     # KHANH ADD
+            idx = np.random.randint(0, len(self.lidar_list))
 
-        #     dataset_dict_ = {}
-        #     dataset_dict_['xyz'] = self.A.proj_xyz             # [H, W, 3]
-        #     dataset_dict_['intensity'] = self.A.proj_remission # [H, W]
-        #     dataset_dict_['range_img'] = self.A.proj_range     # [H, W]
-        #     dataset_dict_['xyz_mask'] = self.A.proj_mask       # [H, W]
+            self.A.open_scan(self.lidar_list[idx])
+            self.A.open_label(self.label_list[idx])
 
-        #     dataset_dict_['proj_idx'] = self.A.proj_idx
+            dataset_dict_ = {}
+            dataset_dict_['xyz'] = self.A.proj_xyz
+            dataset_dict_['intensity'] = self.A.proj_remission
+            dataset_dict_['range_img'] = self.A.proj_range
+            dataset_dict_['xyz_mask'] = self.A.proj_mask
 
-        #     # KHANH COMMENT
-        #     semantic_label = torch.rand(self.H, self.W)
-        #     semantic_train_label = self.generate_label(semantic_label)
-        #     dataset_dict_['semantic_label'] = semantic_train_label
-            
+            semantic_label = self.A.proj_sem_label
+            semantic_train_label = self.generate_label(semantic_label)
+            dataset_dict_['semantic_label'] = semantic_train_label
 
-        #     # data aug (range shift)
-        #     if np.random.random() >= (1 - self.if_range_shift):
-        #         split_point_ = random.randint(100, self.W-100)
-        #         dataset_dict_ = self.sample_transform(dataset_dict_, split_point_)
+            # data aug (range shift)
+            if np.random.random() >= (1 - self.if_range_shift):
+                split_point_ = random.randint(100, self.W-100)
+                dataset_dict_ = self.sample_transform(dataset_dict_, split_point_)
 
-        #     scan_, label_, mask_ = self.prepare_input_label_semantic_with_mask(dataset_dict_)
-        #     # scan_ = self.prepare_input_label_semantic_with_mask(dataset_dict_)
+            scan_, label_, mask_ = self.prepare_input_label_semantic_with_mask(dataset_dict_)
 
-        #     # KHANH COMMENT
-        #     #data aug (range mix)
-        #     if np.random.random() >= (1 - self.if_range_mix):
-        #         scan_mix1, label_mix1, mask_mix1, scan_mix2, label_mix2, mask_mix2, s = self.BeamMix.forward(scan, label, mask, scan_, label_, mask_)
+            # data aug (range mix)
+            if np.random.random() >= (1 - self.if_range_mix):
+                scan_mix1, label_mix1, mask_mix1, scan_mix2, label_mix2, mask_mix2, s = self.BeamMix.forward(scan, label, mask, scan_, label_, mask_)
 
-        #         if np.random.random() >= 0.5:
-        #             scan, label, mask = scan_mix1, label_mix1, mask_mix1
-        #         else:
-        #             scan, label, mask = scan_mix2, label_mix2, mask_mix2
+                if np.random.random() >= 0.5:
+                    scan, label, mask = scan_mix1, label_mix1, mask_mix1
+                else:
+                    scan, label, mask = scan_mix2, label_mix2, mask_mix2
 
-        #     # data aug (range paste)
-        #     if np.random.random() >= (1 - self.if_range_paste):
-        #         print('np.random.random() >= (1 - self.if_range_paste)')
-        #         scan, label, mask = self.RangePaste(scan, label, mask, scan_, label_, mask_)
+            # data aug (range paste)
+            if np.random.random() >= (1 - self.if_range_paste):
+                scan, label, mask = self.RangePaste(scan, label, mask, scan_, label_, mask_)
 
-        #     # data aug (range union)
-        #     if np.random.random() >= (1 - self.if_range_union):
-        #         print('np.random.random() >= (1 - self.if_range_union)')
-        #         scan, label, mask = self.RangeUnion(scan, label, mask, scan_, label_, mask_)
+            # data aug (range union)
+            if np.random.random() >= (1 - self.if_range_union):
+                scan, label, mask = self.RangeUnion(scan, label, mask, scan_, label_, mask_)
 
-        # # data_dict = {
-        #     'scan_rv': F.to_tensor(scan) if torch.is_tensor(scan) == False else scan,
-        #     'label_rv': F.to_tensor(label).to(dtype=torch.long),
-        #     'mask_rv': F.to_tensor(mask),
-        #     'scan_name': self.lidar_list[index],
-        # }
-            
-        # KHANH COMMENT
-        
-        # TODO: KHANH pass proj_x, proj_y for later shuffle with point cloud data and 
-        # create range_pxpy
         data_dict = {
-            'scan_rv': F.to_tensor(scan) if torch.is_tensor(scan) == False else scan,
-            'proj_x': self.A.proj_x,
-            'proj_y': self.A.proj_y,
-            'valid_range_mask': self.A.valid_range_mask
+            'scan_rv': F.to_tensor(scan),
+            'label_rv': F.to_tensor(label).to(dtype=torch.long),
+            'mask_rv': F.to_tensor(mask),
+            'scan_name': self.lidar_list[index],
         }
-        
+
         return data_dict
 
         # return F.to_tensor(scan), F.to_tensor(label).to(dtype=torch.long), F.to_tensor(mask), self.lidar_list[index]
@@ -328,10 +292,10 @@ class SemkittiRangeViewDataset(data.Dataset):
             sample['xyz'] / scale_matrx,
             np.expand_dims(sample['intensity'], axis=-1), 
             np.expand_dims(sample['range_img']/80.0, axis=-1),
-            np.expand_dims(sample['xyz_mask'], axis=-1),         
+            np.expand_dims(sample['xyz_mask'], axis=-1)
         ]
         input_tensor = np.concatenate(each_input, axis=-1)
-        
+
         semantic_label = sample['semantic_label'][:, :]
         semantic_label_mask = sample['xyz_mask'][:, :]
 

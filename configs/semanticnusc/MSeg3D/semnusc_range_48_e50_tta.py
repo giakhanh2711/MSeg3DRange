@@ -71,7 +71,7 @@ test_cfg = dict(
 
 # dataset settings
 dataset_type = "SemanticNuscDataset"
-data_root =  "data/SemanticNusc"
+data_root =  "../data"
 nsweeps = 1
 
 
@@ -217,11 +217,11 @@ test_pipeline = [
 
 train_anno = "data/SemanticNusc/infos_train_10sweeps_segdet_withvelo_filter_True.pkl"
 val_anno = "data/SemanticNusc/infos_val_10sweeps_segdet_withvelo_filter_True.pkl"
-test_anno = "data/SemanticNusc/infos_test_10sweeps_segdet_withvelo.pkl"
+test_anno = "../data/infos_test_10sweeps_segdet_withvelo.pkl"
 
 
 data = dict(
-    samples_per_gpu=4, 
+    samples_per_gpu=2, 
     workers_per_gpu=8, 
     train=dict(
         type=dataset_type,
